@@ -1,0 +1,38 @@
+User
+    ident Text
+    password Text Maybe
+    UniqueUser ident
+    deriving Typeable
+Email
+    email Text
+    user UserId Maybe
+    verkey Text Maybe
+    UniqueEmail email
+
+Session
+    agent Text
+    token Text
+    startTime UTCTime
+    owner UserId
+    UniqueSessionAgentOwner agent owner
+    UniqueSessionToken token
+    deriving Show
+Document
+    dochash ByteString
+    filepath FilePath Maybe
+    gitRepo FilePath Maybe
+    owner SessionId
+    UniqueDocument dochash
+    deriving Show
+Activity
+    docId DocumentId
+    operation Text
+    redoOp Text Maybe
+    content Text
+    position Text
+    timestamp UTCTime
+    UniqueActivity docId timestamp
+    deriving Show
+    
+
+ -- By default this file is used in Model.hs (which is imported by Foundation.hs)
