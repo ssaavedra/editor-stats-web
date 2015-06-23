@@ -6,3 +6,7 @@
 
 / HomeR GET POST
 /api/v1/sessions SessionsR GET POST
+
+/api/v1/sessions/#Text SessionR GET POST DELETE
+/api/v1/sid/#SessionId/stats SessionStatsR GET POST
+

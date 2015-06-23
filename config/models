@@ -17,19 +17,29 @@ Session
     UniqueSessionAgentOwner agent owner
     UniqueSessionToken token
     deriving Show
+
+Stats
+     editor SessionId
+     timestamp Text
+     stype Text
+     info [Text]
+     deriving Show
+
 Document
     dochash ByteString
-    filepath FilePath Maybe
-    gitRepo FilePath Maybe
+    filepath Text Maybe
+    gitRepo Text Maybe
     owner SessionId
+    creationTime Text Maybe
     UniqueDocument dochash
     deriving Show
 Activity
     docId DocumentId
     operation Text
     redoOp Text Maybe
-    content Text
-    position Text
+    begin Int
+    end Int
+    previousLen Int
     timestamp UTCTime
     UniqueActivity docId timestamp
     deriving Show

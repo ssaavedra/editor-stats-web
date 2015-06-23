@@ -1,17 +1,19 @@
 module Foundation where
 
-import Import.NoFoundation
+import Import.NoFoundation hiding (requestHeaders)
 import Database.Persist.Sql (ConnectionPool, runSqlPool)
 import Text.Hamlet          (hamletFile)
 import Text.Jasmine         (minifym)
-import Yesod.Auth.OAuth2
 import Yesod.Auth.BrowserId (authBrowserId)
 import Yesod.Auth.OAuth2.Google (oauth2Google)
 import Yesod.Default.Util   (addStaticContentExternal)
 import Yesod.Core.Types     (Logger)
 import qualified Yesod.Core.Unsafe as Unsafe
+import Network.Wai.Internal (requestHeaders)
 
 import qualified Data.Text as T
+import qualified Data.ByteString as BS
+import Data.Char (isSpace)
 
 -- | The foundation datatype for your application. This can be a good place to
 -- keep settings and values requiring initialization before your application
@@ -117,6 +119,10 @@ instance YesodPersist App where
 instance YesodPersistRunner App where
     getDBRunner = defaultGetDBRunner appConnPool
 
+
+newtype CachedTokenAuthId a = CachedTokenAuthId { unCached :: Maybe a }
+                              deriving Typeable
+
 instance YesodAuth App where
     type AuthId App = UserId
     -- type AuthId App = Text
@@ -130,14 +136,41 @@ instance YesodAuth App where
     -- Override the above two destinations when a Referer: header is present
     redirectToReferer _ = True
 
-    getAuthId creds = runDB $ do
-        x <- getBy $ UniqueUser $ credsIdent creds
-        case x of
-            Just (Entity uid _) -> return $ Just uid
-            Nothing -> Just <$> insert User
-                { userIdent = credsIdent creds
-                , userPassword = Nothing
-                }
+    maybeAuthId = do
+        req <- waiRequest
+        let authHeader = lookup "authorization" (requestHeaders req)
+        case authHeader of
+          Nothing -> defaultMaybeAuthId
+          Just auth -> checkAuthHeader auth
+
+      where checkAuthHeader = -- cachedAuth .
+              maybeAuthHeaderId
+            -- cachedAuth = fmap unCached . cached . fmap CachedTokenAuthId
+            maybeAuthHeaderId authH =
+              case authorization of
+                (strategy, content)
+                  | T.toLower strategy == "bearer" ->
+                      authorizeCredentials $ T.dropWhile isSpace content
+                _ -> return Nothing
+              where
+                authorization :: (Text, Text)
+                authorization = T.break isSpace $ decodeUtf8 authH
+                authorizeCredentials :: Text -> HandlerT App IO (Maybe (AuthId App))
+                authorizeCredentials token = do
+                  $logInfo ("We got here and got the token! (" ++ token ++")")
+                  maybeSession <- runDB $ getBy $ UniqueSessionToken token
+                  let userId = sessionOwner . entityVal <$> maybeSession
+
+                  return userId
+
+    -- getAuthId creds = runDB $ do
+    --     x <- getBy $ UniqueUser $ credsIdent creds
+    --     case x of
+    --         Just (Entity uid _) -> return $ Just uid
+    --         Nothing -> Just <$> insert User
+    --             { userIdent = credsIdent creds
+    --             , userPassword = Nothing
+    --             }
 
     -- You can add other plugins like BrowserID, email or OAuth here
     authPlugins _ = [authBrowserId def
