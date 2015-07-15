@@ -12,7 +12,7 @@ import qualified Yesod.Core.Unsafe as Unsafe
 import Network.Wai.Internal (requestHeaders)
 
 import qualified Data.Text as T
-import qualified Data.ByteString as BS
+
 import Data.Char (isSpace)
 
 -- | The foundation datatype for your application. This can be a good place to
@@ -163,14 +163,14 @@ instance YesodAuth App where
 
                   return userId
 
-    -- getAuthId creds = runDB $ do
-    --     x <- getBy $ UniqueUser $ credsIdent creds
-    --     case x of
-    --         Just (Entity uid _) -> return $ Just uid
-    --         Nothing -> Just <$> insert User
-    --             { userIdent = credsIdent creds
-    --             , userPassword = Nothing
-    --             }
+    getAuthId creds = runDB $ do
+        x <- getBy $ UniqueUser $ credsIdent creds
+        case x of
+            Just (Entity uid _) -> return $ Just uid
+            Nothing -> Just <$> insert User
+                { userIdent = credsIdent creds
+                , userPassword = Nothing
+                }
 
     -- You can add other plugins like BrowserID, email or OAuth here
     authPlugins _ = [authBrowserId def

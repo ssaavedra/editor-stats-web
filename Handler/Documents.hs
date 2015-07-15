@@ -3,9 +3,9 @@ module Handler.Documents where
 
 import Import
 import Prelude (read)
-import Data.Aeson (fromJSON)
+
 import Yesod.Form.Jquery
-import qualified Data.Text as T (pack, unpack)
+
 
 instance YesodJquery App
 

@@ -14,6 +14,8 @@ getSessionR token = do
       [whamlet|
        <h2>Session ##{show $ fromSqlKey sessionId} (#{sessionAgent session})
        <p>
+         <a href=@{SessionStatsR $ sessionId}>Show statistics for this session
+
 
        <p>
          <strong>Token ID:
