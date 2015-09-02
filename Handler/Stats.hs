@@ -3,6 +3,8 @@ module Handler.Stats where
 import Import
 import Handler.Documents (ListingAPI(..))
 
+import qualified Control.Monad.State as SM
+
 import Text.Shakespeare.Text
 import Language.Sexp.Parser (parseExn, Sexp(..))
 import qualified Data.ByteString.Lazy
@@ -52,7 +54,56 @@ getSessionStatsR sessionId = do
 
 
 -- TODO: Implement MonadPlus? of StatsTransaction which is a [Stats]
--- with a "current-active-doc" state to carry over the ">>" operation.(1441131169.2925935 (:checkpoint 0))
+-- with a "current-active-doc" state to carry over the ">>" operation.
+
+topLevelDecl = undefined
+
+pairStatsWithDocuments sid statList = SM.evalState pairStats (statList, Nothing)
+  where pairStats :: SM.State ([Stats], Maybe Document) [Stats]
+        pairStats = do
+          curDoc <- SM.gets snd
+          case curDoc of
+            Nothing -> do let fromDoc = getFromInitialDocument statList
+                          elts <- SM.gets fst
+                          theDoc <- retrieveOrCreateDoc $ head fromDoc
+                          SM.evalState pairStats (fromDoc, Just theDoc)
+            Just doc -> do elts <- SM.gets fst
+                           let (related, rest) = span (docDoesNotChange doc) elts
+                               related' = relateToDoc doc related
+                           related'
+
+        docDoesNotChange doc stat = docId == Nothing &&
+                                    stype /= ":buffer-switch" &&
+                                    stype /= ":buffer-inactive" &&
+                                    stype /= ":buffer-active"
+          where docId = statsDocument stat
+                stype = statsStype stat
+        
+        docEquals doc stat = statsDocument stat == Just doc
+
+        getFromInitialDocument = dropWhile (not isBufferSwitch)
+        relateToDoc = map $ id
+        isBufferSwitch a = True
+
+        retrieveOrCreateDoc stat = do existing <- runDB $ selectList [ DocumentOwner ==. sid
+                                                                     , DocumentDochash ==. hash
+                                                                     , DocumentFilepath ==. path
+                                                                     , DocumentGitRepo ==. repo
+                                                                     ] [LimitTo 1]
+                                      if null existing then
+                                        runDB $ insert $ Document sid hash path repo time
+                                        else
+                                        return $ entityKey $ head existing
+          where info = assert (statsStype stat == ":buffer-switch" || statsStype stat == ":buffer-active") $ statsInfo stat
+                infoH = parseJSON info
+                hash = get ":buffer-path-sha256" infoH
+                path = get ":buffer-name" infoH
+                repo = get ":buffer-projectile-dir" infoH
+                time = Nothing
+
+
+
+
 
 
 postSessionStatsR :: SessionId -> Handler TypedContent
@@ -64,7 +115,7 @@ postSessionStatsR sessionId = do
   --     stats' = mapMaybe (parseStat sessionId) sexp
 
   let sexp = parseExn . Data.ByteString.Lazy.fromChunks . return . encodeUtf8 =<< return stats
-      stats' = mapMaybe (parseStat sessionId (toSqlKey 0)) sexp
+      stats' = mapMaybe (parseStat sessionId Nothing) sexp
 
   -- TODO Trim sequences already on DB
   newStats <- filterM statSelector stats'
@@ -85,9 +136,15 @@ statSelector stat = do
   return $ null existing
 
 
-someSid = undefined :: SessionId
-someSid2 = toSqlKey 5 :: SessionId
-someDocId = toSqlKey 5 :: DocumentId
+someSid  :: SessionId
+someSid = undefined
+
+someSid2 :: SessionId
+someSid2 = toSqlKey 5
+
+someDocId :: Maybe DocumentId
+someDocId = Just $ toSqlKey 5 :: Maybe DocumentId
+
 sampleStatStr = "(1435234819.2160487 (:buffer-change 3931 3931 144))"
 sampleStatSexp = parseExn . Data.ByteString.Lazy.fromChunks . return . encodeUtf8 =<< [sampleStatStr]
 sampleStats = mapMaybe (parseStat someSid2 someDocId) sampleStatSexp
