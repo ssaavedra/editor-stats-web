@@ -20,7 +20,7 @@ Session
 
 Stats
      editor SessionId
-     document DocumentId
+     document DocumentId Maybe
      timestamp Text
      stype Text
      info [Text]
