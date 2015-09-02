@@ -9,6 +9,8 @@ import qualified Data.ByteString.Lazy
 import qualified Data.Text.Lazy
 import qualified Data.Text.Lazy.Encoding as TL (decodeUtf8, encodeUtf8)
 
+import Database.Persist.Sql (toSqlKey)
+
 
 checkOwningSession sessionId = do
   session <- runDB $ get404 sessionId
@@ -62,7 +64,7 @@ postSessionStatsR sessionId = do
   --     stats' = mapMaybe (parseStat sessionId) sexp
 
   let sexp = parseExn . Data.ByteString.Lazy.fromChunks . return . encodeUtf8 =<< return stats
-      stats' = mapMaybe (parseStat sessionId) sexp
+      stats' = mapMaybe (parseStat sessionId (toSqlKey 0)) sexp
 
   -- TODO Trim sequences already on DB
   newStats <- filterM statSelector stats'
@@ -83,9 +85,15 @@ statSelector stat = do
   return $ null existing
 
 
+someSid = undefined :: SessionId
+someSid2 = toSqlKey 5 :: SessionId
+someDocId = toSqlKey 5 :: DocumentId
+sampleStatStr = "(1435234819.2160487 (:buffer-change 3931 3931 144))"
+sampleStatSexp = parseExn . Data.ByteString.Lazy.fromChunks . return . encodeUtf8 =<< [sampleStatStr]
+sampleStats = mapMaybe (parseStat someSid2 someDocId) sampleStatSexp
 
 
-parseStat sid sexp = case sexp of
+parseStat sid docId sexp = case sexp of
   List [(Atom time),
         List ((Atom stype):info)
        ] ->
@@ -93,7 +101,7 @@ parseStat sid sexp = case sexp of
         stype' = decodeUtf8 $ toStrict stype
         info' = map sexpToText info
     in
-      Just $ Stats sid time' stype' info'
+      Just $ Stats sid docId time' stype' info'
 
   _ -> Nothing
 

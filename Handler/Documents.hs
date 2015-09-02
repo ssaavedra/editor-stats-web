@@ -57,10 +57,10 @@ utcTimeField = convertField show read textField
 
 documentMetaForm :: SessionId -> Html -> MForm Handler (FormResult Document, Widget)
 documentMetaForm sessionId = renderDivs $ Document
-    <$> areq bytestringField "Document Name" Nothing
+    <$> areq (selectField sessions) "session id" (Just sessionId)
+    <*> areq bytestringField "Document Name" Nothing
     <*> aopt textField "File path" Nothing
     <*> aopt textField "Git repo path" Nothing
-    <*> areq (selectField sessions) "session id" (Just sessionId)
     <*> aopt textField "Creation Time" Nothing
 
   where sessions = do

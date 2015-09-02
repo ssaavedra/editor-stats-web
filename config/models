@@ -20,18 +20,19 @@ Session
 
 Stats
      editor SessionId
+     document DocumentId
      timestamp Text
      stype Text
      info [Text]
      deriving Show
 
 Document
+    owner SessionId
     dochash ByteString
     filepath Text Maybe
     gitRepo Text Maybe
-    owner SessionId
     creationTime Text Maybe
-    UniqueDocument dochash
+    UniqueDocument owner dochash
     deriving Show
 Activity
     docId DocumentId
