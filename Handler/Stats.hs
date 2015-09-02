@@ -49,6 +49,10 @@ getSessionStatsR sessionId = do
             |]
 
 
+-- TODO: Implement MonadPlus? of StatsTransaction which is a [Stats]
+-- with a "current-active-doc" state to carry over the ">>" operation.(1441131169.2925935 (:checkpoint 0))
+
+
 postSessionStatsR :: SessionId -> Handler TypedContent
 postSessionStatsR sessionId = do
   session <- checkOwningSession sessionId
@@ -60,9 +64,25 @@ postSessionStatsR sessionId = do
   let sexp = parseExn . Data.ByteString.Lazy.fromChunks . return . encodeUtf8 =<< return stats
       stats' = mapMaybe (parseStat sessionId) sexp
 
-  -- TODO Persist on DB
-  r <- sequence $ map (runDB . insert) stats'
-  multiRepr r
+  -- TODO Trim sequences already on DB
+  newStats <- filterM statSelector stats'
+
+  insertedIds <- runDB $ sequence $ map insert newStats
+  r <- runDB $ sequence $ map get insertedIds
+  multiRepr $ object [ "length" .= length insertedIds
+                     , "ids" .= insertedIds
+                     , "status" .= ("ok" :: Text)
+                     ]
+
+
+statSelector :: Stats -> Handler Bool
+statSelector stat = do
+  existing <- runDB $ selectList [ StatsEditor ==. statsEditor stat
+                                 , StatsTimestamp ==. statsTimestamp stat
+                                 , StatsStype ==. statsStype stat] [LimitTo 1]
+  return $ null existing
+
+
 
 
 parseStat sid sexp = case sexp of
@@ -78,7 +98,7 @@ parseStat sid sexp = case sexp of
   _ -> Nothing
 
 sexpToText (Atom i) = Data.Text.Lazy.toStrict $ TL.decodeUtf8 i
-sexpToText (List l) = concat ["[", intercalate ", " $ map sexpToText l, "]"]
+sexpToText (List l) = concat ["[\"", intercalate "\", \"" $ map sexpToText l, "\"]"]
 
 
 
