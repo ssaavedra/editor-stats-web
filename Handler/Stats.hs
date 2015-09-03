@@ -1,15 +1,15 @@
 module Handler.Stats where
 
 import Import
+import qualified Prelude (head, tail)
+import Data.Maybe (fromJust)
 import Handler.Documents (ListingAPI(..))
-
-import qualified Control.Monad.State as SM
 
 import Text.Shakespeare.Text
 import Language.Sexp.Parser (parseExn, Sexp(..))
 import qualified Data.ByteString.Lazy
 import qualified Data.Text.Lazy
-import qualified Data.Text.Lazy.Encoding as TL (decodeUtf8, encodeUtf8)
+import qualified Data.Text.Lazy.Encoding as TL (decodeUtf8)
 
 import Database.Persist.Sql (toSqlKey)
 
@@ -86,19 +86,27 @@ pairStatsWithDocuments sid statList = SM.evalState pairStats (statList, Nothing)
         isBufferSwitch a = True
 
         retrieveOrCreateDoc stat = do existing <- runDB $ selectList [ DocumentOwner ==. sid
-                                                                     , DocumentDochash ==. hash
+                                                                     , DocumentDochash ==. dochash
                                                                      , DocumentFilepath ==. path
                                                                      , DocumentGitRepo ==. repo
                                                                      ] [LimitTo 1]
                                       if null existing then
-                                        runDB $ insert $ Document sid hash path repo time
+                                        runDB $ insert $ Document sid dochash path repo time
                                         else
-                                        return $ entityKey $ head existing
+                                        return $ entityKey $ Prelude.head existing
           where info = assert (statsStype stat == ":buffer-switch" || statsStype stat == ":buffer-active") $ statsInfo stat
-                infoH = parseJSON info
-                hash = get ":buffer-path-sha256" infoH
-                path = get ":buffer-name" infoH
-                repo = get ":buffer-projectile-dir" infoH
+                getProp_ :: (Text -> Bool) -> [Text] -> Maybe Text
+                getProp_ _ [] = Nothing
+                getProp_ _ [_] = Nothing
+                getProp_ p (k:x:xs) = if p k then Just x
+                                      else getProp_ p xs
+
+                getProp :: Text -> [Text] -> Maybe Text
+                getProp q = getProp_ (== q)
+
+                dochash = encodeUtf8 $ fromJust $ getProp ":buffer-path-sha256" info
+                path = getProp ":buffer-name" info
+                repo = getProp ":buffer-projectile-dir" info
                 time = Nothing
 
 
@@ -121,7 +129,7 @@ postSessionStatsR sessionId = do
   newStats <- filterM statSelector stats'
 
   insertedIds <- runDB $ sequence $ map insert newStats
-  r <- runDB $ sequence $ map get insertedIds
+  -- r <- runDB $ sequence $ map get insertedIds
   multiRepr $ object [ "length" .= length insertedIds
                      , "ids" .= insertedIds
                      , "status" .= ("ok" :: Text)
