@@ -53,37 +53,25 @@ getSessionStatsR sessionId = do
             |]
 
 
--- TODO: Implement MonadPlus? of StatsTransaction which is a [Stats]
--- with a "current-active-doc" state to carry over the ">>" operation.
+pairStatsWithDocuments :: SessionId -> [Stats] -> Handler [Stats]
+pairStatsWithDocuments sid statList = do let ((curstats, rest), switchstat) =
+                                               (span docDoesNotChange $ Prelude.tail validStats, Prelude.head validStats)
+                                         docId <- retrieveOrCreateDoc switchstat
+                                         let curstats' = map (updateDoc docId) curstats
+                                         return curstats' +++ pairStatsWithDocuments sid rest 
 
-topLevelDecl = undefined
+  where (+++) :: Monad m => m [a] -> m [a] -> m [a]
+        (+++) = liftM2 (++)
 
-pairStatsWithDocuments sid statList = SM.evalState pairStats (statList, Nothing)
-  where pairStats :: SM.State ([Stats], Maybe Document) [Stats]
-        pairStats = do
-          curDoc <- SM.gets snd
-          case curDoc of
-            Nothing -> do let fromDoc = getFromInitialDocument statList
-                          elts <- SM.gets fst
-                          theDoc <- retrieveOrCreateDoc $ head fromDoc
-                          SM.evalState pairStats (fromDoc, Just theDoc)
-            Just doc -> do elts <- SM.gets fst
-                           let (related, rest) = span (docDoesNotChange doc) elts
-                               related' = relateToDoc doc related
-                           related'
+        updateDoc docId stat = stat { statsDocument = Just docId }
 
-        docDoesNotChange doc stat = docId == Nothing &&
-                                    stype /= ":buffer-switch" &&
-                                    stype /= ":buffer-inactive" &&
-                                    stype /= ":buffer-active"
-          where docId = statsDocument stat
-                stype = statsStype stat
-        
-        docEquals doc stat = statsDocument stat == Just doc
+        validStats = dropWhile (not . isBufferSwitch) statList
+        isBufferSwitch stat = stype /= ":buffer-switch" &&
+                              stype /= ":buffer-inactive" &&
+                              stype /= ":buffer-active"
+          where stype = statsStype stat
 
-        getFromInitialDocument = dropWhile (not isBufferSwitch)
-        relateToDoc = map $ id
-        isBufferSwitch a = True
+        docDoesNotChange = not . isBufferSwitch
 
         retrieveOrCreateDoc stat = do existing <- runDB $ selectList [ DocumentOwner ==. sid
                                                                      , DocumentDochash ==. dochash
